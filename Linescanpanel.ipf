@@ -45,7 +45,14 @@
 //Fixed Background subtraction error from profile when only one image is in the stack
 //Background profiles are now scaled like loaded image
 
-
+//11-APR-2014:
+//1/ Added Button "profile from all images" : calls function calcall2d() 
+//this calculates (using values from the panel) profiles (and background subtracts) for ALL 2d images contained 
+//in current data folder, even if they were not loaded with the panel
+//the calculated profiles are 1d waves named as "prof_+name of wave+index"
+//if applicable the background corrected profiles are named as "c_prof+name of wave+index"
+//2/ Redesigned panel
+//3/ added dropped-down menu to do 4 basic operations on profiles
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
  Macro linescanpanel()
@@ -529,14 +536,10 @@ Function CalcLSprofiles()
 							for (k=0; k<dimsize($("Stack_Ch"+num2str(chindex+1)+"_"+filesuffix+"_"+num2str(i)),2);k+=1)
 								wavestats/q $(tempnamebg+"_"+num2str(i)+"_"+num2str(k))
 								variable tempvalbg=V_avg
-								print V_avg
-							
-					
-								print "avg "+nameofwave($(tempnamebg+"_"+num2str(i)+"_"+num2str(k))), tempvalbg, V_avg
 								tempsub[][k]=tempsub[p][k]-tempvalbg
 							endfor
 						Endif
-					//duplicate/o tempsub trythiswave
+					
 				
 					Rename tempsub, $("c_"+"st_"+tempname0+"_"+num2str(i))
 				Endif
@@ -671,15 +674,15 @@ Function average2dwave(wavein,plot,plotind,newname)
 			string/g nameavg=uniquename("avg_"+nameofwave(wavein),1,0)
 			Duplicate/o avg,$nameavg
 			Setscale/p x,0, dimdelta(wavein,0),"" $nameavg
-			string/g namestdev=uniquename("stdev_"+nameofwave(wavein),1,0)
+			string/g namestdev=uniquename("std_"+nameofwave(wavein),1,0)
 			Duplicate/o stdev, $namestdev
 			Setscale/p x,0, dimdelta(wavein,0),"" $namestdev
 			killstrings nameavg, namestdev
 		Elseif (newname==1)
 			Duplicate/o avg,$("avg_"+nameofwave(wavein))
 			Setscale/p x,0, dimdelta(wavein,0),"", $("avg_"+nameofwave(wavein))
-			Duplicate/o stdev,$("stdev_"+nameofwave(wavein))
-			Setscale/p x,0, dimdelta(wavein,0),"", $("stdev_"+nameofwave(wavein))
+			Duplicate/o stdev,$("std_"+nameofwave(wavein))
+			Setscale/p x,0, dimdelta(wavein,0),"", $("std_"+nameofwave(wavein))
 			killwaves avg, stdev
 		endif
 		
@@ -699,12 +702,12 @@ Function average2dwave(wavein,plot,plotind,newname)
 				modifygraph rgb=(0,0,0)
 			endfor
 			Appendtograph  $("avg_"+nameofwave(wavein))
-			Errorbars/L=0/Y=1 $("avg_"+nameofwave(wavein)) Y, wave=($("stdev_"+nameofwave(wavein)),$("stdev_"+nameofwave(wavein)))
+			Errorbars/L=0/Y=1 $("avg_"+nameofwave(wavein)) Y, wave=($("std_"+nameofwave(wavein)),$("std_"+nameofwave(wavein)))
 		Elseif ((plotind==0)&&(plot==0))
 			Display $("avg_"+nameofwave(wavein))
 		Elseif ((plotind==0)&&(plot==1))
 			Display $("avg_"+nameofwave(wavein))
-			Errorbars/L=0/Y=1 $("avg_"+nameofwave(wavein)) Y, wave=($("stdev_"+nameofwave(wavein)),$("stdev_"+nameofwave(wavein)))
+			Errorbars/L=0/Y=1 $("avg_"+nameofwave(wavein)) Y, wave=($("std_"+nameofwave(wavein)),$("std_"+nameofwave(wavein)))
 		endif
 		
 
@@ -716,12 +719,13 @@ End
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-Function addprofiles()
-	// this function finds the profiles created with CalcLSprofiles() functions, finds in the panel the channels the user wants to add and if they exists create new waves: c_profile_channeltoadd1_channeltoadd2_profilenum_groupnum_waveindex
+Function oponprofiles()
+	// this function finds the profiles created with CalcLSprofiles() functions, finds in the panel the channels
+	// the user wants to add and if they exists create new waves: c_profile_channeltoadd1_channeltoadd2_profilenum_groupnum_waveindex
 	
 	DFREF cDF=getdatafolderdfr()
 	NVAR Flag2Ch1, Flag2Ch2,Flag2Ch3, Flag2Ch4
-	string/g chtoadd1,chtoadd2
+	string/g chtoadd1,chtoadd2,optype
 	variable/g valprofadd,checkbg
 	SVAR filesuffix
 	
@@ -729,10 +733,13 @@ Function addprofiles()
 		 chtoadd1=S_Value
 	Controlinfo/W=linescanpanel plotproftoadd2
 		chtoadd2=S_Value
+	Controlinfo/W=linescanpanel  profoperation
+		optype=S_Value
 	Controlinfo/W=linescanpanel  valproftoadd
 		valprofadd=V_Value
 	Controlinfo/W=linescanpanel  subbgcheck
 		checkbg=V_Value
+	
 		
 	//checks that the channels selected correspond to existing profiles
 	If ( ((stringmatch(chtoadd1,"Ch1")==1) || (stringmatch(chtoadd2,"Ch1")==1)) && (waveexists($("list_0_"+filesuffix+"_Ch1_"+num2str(0)))!=1))
@@ -753,11 +760,28 @@ Function addprofiles()
 	If (checkbg==1)
 		prefixadd1="c_profile_"+chtoadd1+"_"
 		prefixadd2="c_profile_"+chtoadd2+"_"
-		prefixadd12="c_profile_"+chtoadd1+"_"+chtoadd2+"_"
+		if (stringmatch(optype," + ")==1)
+			prefixadd12="c_profile_"+chtoadd1+chtoadd2+"_add"
+		elseif (stringmatch(optype," - ")==1)
+			prefixadd12="c_profile_"+chtoadd1+chtoadd2+"_min"
+		elseif (stringmatch(optype," / ")==1)
+			prefixadd12="c_profile_"+chtoadd1+chtoadd2+"_over"
+		elseif (stringmatch(optype," x ")==1)
+			prefixadd12="c_profile_"+chtoadd1+chtoadd2+"_mult"	
+		endif
 	Elseif (checkbg==0)
 		prefixadd1="profile_"+chtoadd1+"_"
 		prefixadd2="profile_"+chtoadd2+"_"
-		prefixadd12="profile_"+chtoadd1+"_"+chtoadd2+"_"
+		if (stringmatch(optype," + ")==1)
+			prefixadd12="profile_"+chtoadd1+chtoadd2+"_add"
+		elseif (stringmatch(optype," - ")==1)
+			prefixadd12="profile_"+chtoadd1+chtoadd2+"_min"
+		elseif (stringmatch(optype," / ")==1)
+			prefixadd12="profile_"+chtoadd1+chtoadd2+"_over"
+		elseif (stringmatch(optype," x ")==1)
+			prefixadd12="profile_"+chtoadd1+chtoadd2+"_mult"	
+		endif
+		print prefixadd12
 	Endif	
 	
 
@@ -848,6 +872,7 @@ Function addprofiles()
 	
 	findvalue/v=(valprofadd) windex12
 	variable prof12=V_value
+	///performs operation on profiles depending on the op type chosen
 	if (prof12==-1)
 		findvalue/v=(valprofadd) windex1
 		variable prof1=V_value
@@ -859,7 +884,15 @@ Function addprofiles()
 						make/o/n=((dimsize($(stringfromlist(indadd,toaddnow1)),0))) tempwave
 						Duplicate $(stringfromlist(indadd,toaddnow1)) temp0
 						Duplicate $(stringfromlist(indadd,toaddnow2)) temp1
-						tempwave=temp0+temp1
+						If (stringmatch(optype," + ")==1)
+							tempwave=temp0+temp1
+						Elseif (stringmatch(optype," - ")==1)
+							tempwave=temp0-temp1
+						Elseif (stringmatch(optype," / ")==1)
+							tempwave=temp0/temp1
+						Elseif (stringmatch(optype," x ")==1)
+							tempwave=temp0*temp1
+						Endif
 						setscale/p x,0,dimdelta(temp0,0),"" tempwave
 						variable groupindex,traceindex
 						sscanf stringfromlist(indadd,toaddnow1), prefixaddnow1+"%f%*[_]%f", groupindex, traceindex
@@ -875,7 +908,7 @@ Function addprofiles()
 				doAlert 0, "These profiles do not exist"
 			endif
 	else
-		doAlert 0, "These profiles have already been added!"
+		doAlert 0, "This operation has already been performed on these profiles!"
 		return 0
 	endif
 	
@@ -1007,7 +1040,6 @@ End
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-
 Function subimagebg(imtosub)
 	wave imtosub
 	Variable/g Flagbgprofile, Flagbgvalue,Flagbgsub, xbgstart,xbgwidth, bgvalue
@@ -1081,6 +1113,150 @@ Function subimagebg(imtosub)
 	Endif
 
 end
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+Function calcall2d()
+	///this function is called by the button calcallprofile. 
+	//It uses the values in the panel and calculate the profiles (if possible) from all corresponding images in the folder
+	//the profiles calculated will be stored as "prof_nameofwave_index"
+	//if applicable the background corrected profile will be calculated and stored as "c_prof_nameofwave_index"
+	
+	DFREF cDF=getdatafolderdfr()
+	Variable/g Flagbgprofile, Flagbgvalue,Flagbgsub, xbgstart,xbgwidth,pixelsize, scanlineprd, num2dw
+	variable i
+	string list2d
+	
+	Controlinfo/W=linescanpanel bgprofilecheck
+		Flagbgprofile=V_Value
+	Controlinfo/W=linescanpanel bgvaluecheck
+		Flagbgvalue=V_Value
+	Controlinfo/W=linescanpanel subbgcheck
+		Flagbgsub=V_Value
+
+	
+	list2d=wavelist("*",";","DIMS:2")
+	num2dw=itemsinlist(list2d)
+	If (num2dw==0)
+		doAlert 0, "no image loaded"
+		return 0
+	endif
+	
+	String firstfile=stringfromlist(0,list2d)
+	
+	If ((Flagbgsub==1)&&((Flagbgvalue+Flagbgprofile)!=1))
+		doAlert 0, "choose one method (value or calculate from profile) for background subtraction"
+		return 0
+	Endif
+	
+	
+	
+	string namexprofstart
+	namexprofstart=uniquename("xprofstart",3,0)
+	variable/g $namexprofstart
+	NVAR varprofstart=$namexprofstart
+	Controlinfo/W=linescanpanel profxstartset
+	varprofstart=V_Value
+	
+	string namexprofwidth
+	namexprofwidth=uniquename("xprofwidth",3,0)
+	variable/g $namexprofwidth
+	NVAR varprofwidth=$namexprofwidth
+	Controlinfo/W=linescanpanel profwidthset
+	varprofwidth=V_Value
+	
+	
+	
+	// checks if values entered for profile are within image
+
+	for (i=0;i<num2dw;i+=1)
+		If (((varprofstart+varprofwidth)>dimsize($(stringfromlist(i,list2d)),0)/dimdelta($(stringfromlist(i,list2d)),0)) || (varprofstart<0))
+			doAlert 0, "profile out of image for image "+stringfromlist(i,list2d)
+		Endif
+	endfor
+
+	
+	If (Flagbgvalue==1) // If the "Enter value" checkbox was checked, use Scale by num and bg_value for background subtraction
+		Controlinfo/W=linescanpanel bgvalset
+		Variable/g bgvalue=V_Value
+	Endif
+		
+	If (Flagbgprofile==1)//Use this if a part of the line has been drawn out of the dendrite
+		string namexbgstart
+		namexbgstart=uniquename("xbgstart",3,0)
+		variable/g $namexbgstart
+		NVAR varbgstart=$namexbgstart
+		Controlinfo/W=linescanpanel bgxstartset
+		varbgstart=V_Value
+	
+		string namexbgwidth
+		namexbgwidth=uniquename("xbgwidth",3,0)
+		variable/g $namexbgwidth
+		NVAR varbgwidth=$namexbgwidth
+		Controlinfo/W=linescanpanel bgwidthset
+		varbgwidth=V_Value
+		
+		If (((varbgstart+varbgwidth)>dimsize($firstfile,0)/pixelsize) || (varbgstart<0))
+			doAlert 0, "background profile out of image"
+			return 0
+		Endif
+		
+	endif
+	
+	for (i=0;i<num2dw;i+=1)
+			make/o/n=2 xprof
+			xprof[0]=varprofstart+(varprofwidth/2) 
+			xprof[1]=varprofstart+(varprofwidth/2)
+			make/o/n=2 yprof
+			yprof[0]=0
+			yprof[1]=dimsize($(stringfromlist(i,list2d)),1)*dimdelta($(stringfromlist(i,list2d)),1)
+			Make/o/n=5 lineprofx={varprofstart, varprofstart, NaN, varprofstart+varprofwidth, varprofstart+varprofwidth} 
+			Make/o/n=5 lineprofy={-INF,INF,NaN,-INF,INF}
+		
+			string tempname0
+			tempname0=uniquename("prof_"+stringfromlist(i,list2d)+"_",1,0)
+			wave tryw=$tempname0
+			
+			Imagelineprofile/P=-2 srcwave=$(stringfromlist(i,list2d)), xwave=xprof, ywave=yprof, width=floor(varprofwidth/dimdelta($(stringfromlist(i,list2d)),0))
+			
+			Duplicate/o W_Imagelineprofile,  $tempname0
+			Setscale/P x,0,dimdelta($(stringfromlist(i,list2d)),1),"ms" $tempname0
+			
+			If ((Flagbgsub==1)&&(Flagbgvalue==1))
+				Duplicate/o $tempname0 tempwa
+				tempwa-=bgvalue
+				Duplicate  tempwa $("c_"+nameofwave($tempname0))
+				Setscale/P x,0,dimdelta($(stringfromlist(i,list2d)),1),"ms" $("c_"+nameofwave($tempname0))
+				print i,"c_"+nameofwave($tempname0)
+				killwaves tempwa
+			Elseif ((Flagbgsub==1)&&(Flagbgprofile==1))
+				Make/o/n=2 xbgprof
+				xbgprof[0]=varbgstart+(varbgwidth/2) //xbgprof will be used as xwave in the imagelineprofile command (center of the profile)
+				xbgprof[1]=varbgstart+(varbgwidth/2)
+				Make/o/n=2 ybgprof
+				ybgprof[0]=0
+				ybgprof[1]=dimsize($(stringfromlist(i,list2d)),1)*dimdelta($(stringfromlist(i,list2d)),1)
+				Make/o/n=5 linebgx={varbgstart, varbgstart, NaN,varbgstart+varbgwidth, varbgstart+varbgwidth} 
+				Make/o/n=5 linebgy={-INF,INF,NaN,-INF,INF}
+
+				string tempnamebg
+				tempnamebg=uniquename("bg_Ch"+stringfromlist(i,list2d)+"_",1,0)
+				wave tryw2=$tempnamebg
+				Imagelineprofile/P=-2 srcwave=$(stringfromlist(i,list2d)), xwave=xbgprof, ywave=ybgprof, width=floor(varbgwidth/dimdelta($(stringfromlist(i,list2d)),0))
+				Duplicate/o W_Imagelineprofile, $tempnamebg
+				wavestats/q $tempnamebg
+				
+				variable tempvalbg2=V_avg
+				Duplicate/o $tempname0 tempwe
+				tempwe=tempwe-tempvalbg2
+				Duplicate/o tempwe $("c_"+nameofwave($tempname0))
+				Setscale/P x,0,dimdelta($(stringfromlist(i,list2d)),1),"ms" $("c_"+nameofwave($tempname0))
+				killwaves tempwe
+			Endif
+	endfor
+	
+end
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 Function SetFolderButtonProc(ba) : buttoncontrol
 
@@ -1136,13 +1312,13 @@ End
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-Function addprofbuttonproc(ba) : buttoncontrol
+Function oponprofbuttonproc(ba) : buttoncontrol
 
 	STRUCT WMButtonAction &ba
 	
 	switch( ba.eventCode )
 		case 2:
-			addprofiles()
+			oponprofiles()
 		break
 	endswitch
 	
@@ -1199,13 +1375,26 @@ Function makedffbuttonproc(ba) : buttoncontrol
 	
 	return 0
 End
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+Function CalcallButtonproc(ba) : buttoncontrol
+
+	STRUCT WMButtonAction &ba
+	
+	switch( ba.eventCode )
+		case 2:
+			Calcall2d()
+		break
+	endswitch
+	
+	return 0
+End
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 Function MakeLinescanPanel()
 
 	DFREF cDF=GetDataFolderdfr()
-	//SVAR imlist
 	SetDataFolder root:
 	NewDataFolder/O/S loadFolder
 	String/g folderpath="_none_"
@@ -1221,7 +1410,7 @@ Function MakeLinescanPanel()
 	
 	
 	
-	NewPanel /K=1 /W=(835,50,1360,510) as "LineScan Analysis"
+	NewPanel /K=1 /W=(835,50,1360,600) as "LineScan Analysis"
 	DoWindow/C linescanpanel
 	
 	Groupbox loadbox, pos={20,4}, size={490,140}, Title="Load images",fstyle=1,fsize=14
@@ -1238,7 +1427,7 @@ Function MakeLinescanPanel()
 	Checkbox displaycheck,pos={50,92}, size={95,14}, title="Display average of each group", value=0
 	Button Loadlinescan, pos={32,117},size={80,20},proc=LoadLSButtonproc, title="Load Now"
 	
-	GroupBox analysisbox, pos={20,150}, size={490,292}, TItle="Analyze images",fstyle=1,fsize=14
+	GroupBox analysisbox, pos={20,150}, size={490,220}, TItle="Calculate profiles",fstyle=1,fsize=14
 	DrawText 33,185,"Background subtraction:" 
 	Checkbox bgprofilecheck, pos={33,190},size={95,14},title="Use profile",value=1
 	Setvariable bgxstartset, pos={130,190},size={70,15}, title="x start", value=root:loadFolder:bgxstart
@@ -1252,34 +1441,39 @@ Function MakeLinescanPanel()
 	DrawText 33,293,"Plot:"
 	PopupMenu plotoptionsmenu, pos={33,293}, size={180,15},title="Display on graph:", mode=1, value="Avg;Avg+Stdev"
 	Popupmenu plotindmenu, pos={220,293}, size={150,15}, Title="Plot individual profiles", mode=1, value="Yes;No"
-	Drawtext 33, 335,"Select Channels to Analyze:"
-	CheckBox profChannel1check, pos={190,320}, size={95,14},title="Ch1",value=0
-	CheckBox profChannel2check, pos={240,320}, size={95,14},title="Ch2",value=1
-	CheckBox profChannel3check, pos={290,320}, size={95,14},title="Ch3",value=0
-	CheckBox profChannel4check, pos={340,320}, size={95,14},title="Ch4",value=0
-	Button Calcprofile, pos={415,316}, size={90,20}, proc=CalcprofButtonproc, title="Calculate"
-	Drawtext 33, 378, "Add profiles:"
-	Popupmenu plotproftoadd1, pos={105,359}, size={150,15}, Title="channel", mode=2, value="Ch1;Ch2;Ch3;Ch4"
-	Popupmenu plotproftoadd2, pos={217,359}, size={150,15}, Title="AND ", mode=4, value="Ch1;Ch2;Ch3;Ch4"
-	Setvariable valproftoadd, pos={340,361}, size={70,15}, title="profile:", value=valprof
-	Button Addprofile, pos={415,359}, size={90,20},proc=addprofbuttonproc, title="Add"
+	Drawtext 33, 335,"Analyze from loaded images:"
+	CheckBox profChannel1check, pos={210,320}, size={95,14},title="Ch1",value=0
+	CheckBox profChannel2check, pos={260,320}, size={95,14},title="Ch2",value=1
+	CheckBox profChannel3check, pos={310,320}, size={95,14},title="Ch3",value=0
+	CheckBox profChannel4check, pos={360,320}, size={95,14},title="Ch4",value=0
+	Button Calcprofile, pos={430,316}, size={75,20}, proc=CalcprofButtonproc, title="Calculate"
+	Drawtext 33, 358,"Batch analyze all images in current data folder:"
+	Button Calcallprofile, pos={385,340}, size={120,20}, proc=CalcallButtonproc, title="Profiles from all images"
 	
-	Drawtext 33, 403, "Add images:"
-	//string pointlist=imlist // using # symbol in popupmenu requires a local string (here pointing to the global string)	
+	GroupBox analysiimbox, pos={20,377}, size={490,155}, TItle="Operations on profiles and images",fstyle=1,fsize=14
+	
+	Drawtext 33, 418, "Operation on profiles:"
+	Popupmenu plotproftoadd1, pos={152,399}, size={150,15}, Title="channel", mode=2, value="Ch1;Ch2;Ch3;Ch4"
+	Popupmenu profoperation, pos={243,399}, size={150,15}, Title="", mode=4, value=" + ; - ; x ; / "
+	Popupmenu plotproftoadd2, pos={285,399}, size={150,15}, Title="", mode=4, value="Ch1;Ch2;Ch3;Ch4"
+	Setvariable valproftoadd, pos={340,401}, size={70,15}, title="profile:", value=valprof
+	Button Addprofile, pos={430,399}, size={75,20},proc=oponprofbuttonproc, title="Calculate"
+	
+	Drawtext 33, 443, "Add images:"
 	Controlupdate/W=linescanpanel  plotimagetoadd1
 	Controlupdate/W=linescanpanel  plotimagetoadd2
-	Popupmenu plotimagetoadd1, pos={105,384}, size={150,80}, value=wavelist("*",";","DIMS:2")
-	Popupmenu plotimagetoadd2, pos={217,384}, size={150,80}, Title="AND ",  value=wavelist("*",";","DIMS:2")
-	CheckBox dispaddimagecheck, pos={360,388}, size={95,14}, title="Display",value=1
-	Button Addimages, pos={415,384}, size={90,20},proc=addimbuttonproc, title="Add"
+	Popupmenu plotimagetoadd1, pos={33,445}, size={150,80}, value=wavelist("*",";","DIMS:2")
+	Popupmenu plotimagetoadd2, pos={197,445}, size={150,80}, Title="+ ",  value=wavelist("*",";","DIMS:2")
+	CheckBox dispaddimagecheck, pos={377,449}, size={95,14}, title="Display",value=1
+	Button Addimages, pos={430,445}, size={75,20},proc=addimbuttonproc, title="Add"
 
 	
-	Drawtext 33, 433, "\F'Symbol'D\F'Arial'F/F image:"
+	Drawtext 33, 493, "\F'Symbol'D\F'Arial'F/F image:"
 	Controlupdate/W=linescanpanel imagetodff
-	Popupmenu imagetodff, pos={105, 415}, size={150,80},  value=wavelist("*",";","DIMS:2")
-	Setvariable valstartdff, pos={220, 417}, size={70,15}, title="t0(ms):", value=dffstart
-	Setvariable valenddff, pos={291, 417}, size={50,15}, title="to:", value=dffend
-	Setvariable nfilter, pos={350, 417}, size={50,15}, title="NxN", value=nnfilter
-	Button Dffimage, pos={415, 415}, size={90,20}, proc=makedffbuttonproc, title="Make"	
+	Popupmenu imagetodff, pos={33, 495}, size={150,80},  value=wavelist("*",";","DIMS:2")
+	Setvariable valstartdff, pos={195, 497}, size={70,15}, title="t0(ms):", value=dffstart
+	Setvariable valenddff, pos={266, 497}, size={50,15}, title="to:", value=dffend
+	Setvariable nfilter, pos={325, 497}, size={50,15}, title="NxN", value=nnfilter
+	Button Dffimage, pos={430, 495}, size={75,20}, proc=makedffbuttonproc, title="Calculate"	
 	
 End
