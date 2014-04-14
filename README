@@ -1,0 +1,57 @@
+//LINESCANPANEL loads linescan images acquired with PrairieView and creates linescan profiles with IGOR PRO.
+//
+//INSTALLATION:
+//Copy the Linescanpanel.ipf file in Igor Procedure folder in the Wavemetrics folder. Restrat Igor Pro. The Linescan panel can be launched
+//from the Macro menu
+//
+//-------------
+//It is recommended to load each linescan folder in a separate data folder, then to merge folders as needed once profiles have been calculated
+//The Load images box in the LineScan Analysis panel calls the function Loadlinescanimages()
+//Select the prairieview xml config file and load tiffs images of corresponding channel. Rename and splits in groups depending similar to neuromatic groups
+// Loaded tiff are renamed as: list_group_filesuffix_Channel_index. Then creates a stack of each tiff and group, named Stack_channel_filesuffix_group
+//The Analyze images box in the LineScan Analysis panel calls the function CalcLSprofiles()
+// this allows to select the position of the vertical profile to create (using Igor Imagelineprofile function)
+//output waves are named profile_channel_filesuffix_indexofprofile_group_indexofwave
+// to display position of calculated profile on image select image and appendtograph lineprofy vs lineprofx in subfolder infoprof...
+//-------------
+//By Alex Tran-Van-Minh (alexandra.tran.van.minh@gmail.com)
+//-------------
+
+//02-JAN-2013: Current PV version (4.3.2.13) does already includes zoom in pixel size. Other versions (e.g. 4.2.1.17) required
+//dividing by optical zoom to get real pixel size
+//Background subtraction checkbox for subtraction from user-entered value or profile.
+//Output wave (background subtracted) is named c_profile_channel_filesuffix_indexofprofile_group_indexofwave and is the one plotted
+
+//13-MAR-2013:
+//1. Corrected image loading to load and display images properly even when there are no repetitions
+//2. All loaded waves are now scaled (including unclassified waves "ls_...")
+//3. All profile waves called "profile_Chx_profilenumber_groupnumber_..." or "c_profile_Chx_profilenumber_groupnumber_..." are now INDIVIDUAL waves,
+// the stack of these waves are now contained in "st_Chx_profilenumber_groupnumber" or "c_st_Chx_profilenumber_groupnumber"
+//4. Fixed "rename error" bug that was appearing when creating multiple profiles with background subtraction:
+//now unique names are created for background waves each time the "calculate" button is used. Background waves are named bg_channel_indexofprofile_group_indexofwave,
+//the average value of each of these background waves is used to subtract from the corresponding profile from the same image.
+
+//27-APR-2013:
+//Add option for 4 channels selection and addition of profiles from 2 channels.
+
+//06-MAY-2013:
+//Add option for adding images and making a deltaF/F image from one of the 2d image in current folder.
+
+//08-MAY-2013:
+//Add background subtraction when making a deltaF/F image and filtering of deltaF/F image.
+
+//22-JAN-2014:
+//Fixed Make error when using user-entered value for background subtraction.
+
+//05-MAR-2014:
+//Fixed Background subtraction error from profile when only one image is in the stack
+//Background profiles are now scaled like loaded image
+
+//11-APR-2014:
+//1/ Added Button "profile from all images" : calls function calcall2d()
+//this calculates (using values from the panel) profiles (and background subtracts) for ALL 2d images contained
+//in current data folder, even if they were not loaded with the panel
+//the calculated profiles are 1d waves named as "prof_+name of wave+index"
+//if applicable the background corrected profiles are named as "c_prof+name of wave+index"
+//2/ Redesigned panel
+//3/ added dropped-down menu to do 4 basic operations on profiles
