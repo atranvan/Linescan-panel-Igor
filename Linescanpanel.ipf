@@ -53,6 +53,10 @@
 //if applicable the background corrected profiles are named as "c_prof+name of wave+index"
 //2/ Redesigned panel
 //3/ added dropped-down menu to do 4 basic operations on profiles
+
+//05-JUN-2014:
+//From version 5.1 on PrairieView includes ".ome" suffix in their file names. Modified loading procedure accordingly.
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
  Macro linescanpanel()
@@ -179,20 +183,27 @@
 	channelstoload[2]=FlagCh3
 	channelstoload[3]=FlagCh4
 	
- 	make/n=800  cyclenum
+ 	make/o/n=800  cyclenum
  	variable chindex
  	
  	Variable index,i,ii
 	index=0
 	i=0
-	
+	String tempfilecycle
 	Do
 
 		fileName = IndexedFile(diskfolderpath, index, ".tif")
+		
 		if (strlen(fileName) == 0)
 			break		
 		endif
-		String tempfilecycle=filename[(strlen(filename)-6),strlen(filename)-5]
+		
+	
+		If ((stringmatch(PVversion[0],"5")==1)&&(str2num(PVversion[2])>=1))//From version 5.1 on file names include .ome before .tif
+			tempfilecycle=filename[(strlen(filename)-10),strlen(filename)-9]
+		Else 
+			tempfilecycle=filename[(strlen(filename)-6),strlen(filename)-5]
+		EndIf
 	
 		cyclenum[index]=str2num(tempfilecycle)
 		
@@ -213,7 +224,7 @@
 	
 
 
-
+	
 	wavestats/q cyclenum
 	variable/g varcyclenum=V_max//finds number of cycle if PV has split the linescan
 
@@ -229,18 +240,20 @@
 		Setscale/p x,0,pixelsize,"microns", $(stringfromlist(l,wlist))
 		Setscale/p y,0,scanlineprd,"ms", $(stringfromlist(l,wlist)) 
 	endfor
-	
+		
 //Splits in groups if needed, makes stacks and averages each stack
 
 		for (chindex=0;chindex<4;chindex+=1)
 			if (channelstoload[chindex]==1)
+			
 				string tempstringlist=wavelist("ls_"+filesuffix+"_Ch"+num2str(chindex+1)+"_"+"*",";","")
 				for (k=0;k<groupnum;k+=1) //copies waves, and redistribute and renames according to number of groups
 					for (jj=k*varcyclenum;jj<itemsinlist(tempstringlist); jj+=(groupnum*varcyclenum)) //checks for images to concatenate
 						j=floor((jj-k)/(groupnum*varcyclenum))
+					
 						for (m=0; m<varcyclenum;m+=1)	
 							Duplicate $Stringfromlist(jj+m,tempstringlist), $("list_"+num2str(k)+"_"+filesuffix+"_Ch"+num2str(chindex+1)+"_"+num2str(j)+num2str(m))
-
+							
 						endfor	
 						string/g templist=wavelist("list_"+num2str(k)+"_"+filesuffix+"_Ch"+num2str(chindex+1)+"_"+num2str(j)+"*",";","")
 						Concatenate/NP=1/KILL templist, $("list_"+num2str(k)+"_"+filesuffix+"_Ch"+num2str(chindex+1)+"_"+num2str(j))
@@ -491,6 +504,7 @@ Function CalcLSprofiles()
 					If (dimsize($("Stack_Ch"+num2str(chindex+1)+"_"+filesuffix+"_"+num2str(j)),2)==0)
 						Duplicate/o $("bg_profile_Ch"+num2str(chindex+1)+"_"+num2str(j)), tempwave
 						Rename tempwave, $(tempnamebg+"_"+num2str(j)+"_0")
+						//print  (tempnamebg+"_"+num2str(j)+"_0")
 						Setscale/P x,0, dimdelta($("Stack_Ch"+num2str(chindex+1)+"_"+filesuffix+"_"+num2str(j)),1),"" $(tempnamebg+"_"+num2str(j)+"_0")
 			
 					Else
@@ -529,9 +543,10 @@ Function CalcLSprofiles()
 					make/o/n=(dimsize( $("st_"+tempname0+"_"+num2str(i)),0), dimsize( $("st_"+tempname0+"_"+num2str(i)),1)) tempsub
 					Duplicate/o  $("st_"+tempname0+"_"+num2str(i)),  tempsub
 						If (dimsize($("Stack_Ch"+num2str(chindex+1)+"_"+filesuffix+"_"+num2str(i)),2)==0)
-							wavestats/q $(tempnamebg+"_"+num2str(i)+"_"+num2str(k))
+							
+							wavestats/Z $(tempnamebg+"_"+num2str(i)+"_0")
 							variable tempvalbg2=V_avg
-							tempsub[][k]=tempsub[p][k]-tempvalbg2
+							tempsub[][j]=tempsub[p][j]-tempvalbg2
 						Else
 							for (k=0; k<dimsize($("Stack_Ch"+num2str(chindex+1)+"_"+filesuffix+"_"+num2str(i)),2);k+=1)
 								wavestats/q $(tempnamebg+"_"+num2str(i)+"_"+num2str(k))
