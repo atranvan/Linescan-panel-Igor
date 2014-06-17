@@ -55,3 +55,6 @@
 //if applicable the background corrected profiles are named as "c_prof+name of wave+index"
 //2/ Redesigned panel
 //3/ added dropped-down menu to do 4 basic operations on profiles
+
+//05-JUN-2014:
+//From version 5.1 on PrairieView includes ".ome" suffix in their file names. Modified loading procedure accordingly.
