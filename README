@@ -58,3 +58,6 @@
 
 //05-JUN-2014:
 //From version 5.1 on PrairieView includes ".ome" suffix in their file names. Modified loading procedure accordingly.
+
+//13-AUG-2014:
+//Adjusted reading of PrairieView .xml  file in Loadlinescanimages() as order and name of some parameters changed in 5.2 version
