@@ -57,6 +57,9 @@
 //05-JUN-2014:
 //From version 5.1 on PrairieView includes ".ome" suffix in their file names. Modified loading procedure accordingly.
 
+//13-AUG-2014:
+//Adjusted reading of PrairieView .xml  file in Loadlinescanimages() as order and name of some parameters changed in 5.2 version
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
  Macro linescanpanel()
@@ -117,47 +120,96 @@
 
 	while(1)
 	
-	Do
-		FReadLine fileref, tempstring
-			if (stringmatch(tempstring,"*scanlinePeriod*")==1)
-				loc=strsearch(tempstring,"value",0)+7
-				locstr=tempstring[loc,loc+8]
-				v1=str2num(locstr)
-				ScanLinePrd=v1*1000
-				print "Scanline period is (ms)=",ScanLinePrd
-				break
+	
+	if ((stringmatch(PVversion[0,0],"4")==1)||((stringmatch(PVversion[0,0],"5")==1)&&(stringmatch(PVversion[2,2],"0")==1))||((stringmatch(PVversion[0,0],"5")==1)&&(stringmatch(PVversion[2,2],"1")==1)))
+	
+		Do
+			FReadLine fileref, tempstring
+				if (stringmatch(tempstring,"*scanlinePeriod*")==1)
+					loc=strsearch(tempstring,"value",0)+7
+					locstr=tempstring[loc,loc+8]
+					v1=str2num(locstr)
+					ScanLinePrd=v1*1000
+					print "Scanline period is (ms)=",ScanLinePrd
+					break
+				endif
+		while(1) 
+	
+		Do
+			FReadLine fileref, tempstring
+			if (stringmatch(tempstring,"*opticalZoom*")==1)
+					loc=strsearch(tempstring,"value",0)+7
+					locstr=tempstring[loc,loc+5]
+					v1=str2num(locstr)
+					zoom=v1
+					print "Optical zoom=",zoom
+					break
 			endif
-	while(1) 
+		while(1)
 	
-	Do
-		FReadLine fileref, tempstring
-		if (stringmatch(tempstring,"*opticalZoom*")==1)
-				loc=strsearch(tempstring,"value",0)+7
-				locstr=tempstring[loc,loc+5]
-				v1=str2num(locstr)
-				zoom=v1
-				print "Optical zoom=",zoom
-				break
-		endif
-
-	while(1)
-	
-	 Do                                          
-		FReadLine fileref, tempstring
-		 if (stringmatch(tempstring,"*micronsPerPixel_XAxis*")==1)
+		 Do                                          
+			FReadLine fileref, tempstring
+			if (stringmatch(tempstring,"*micronsPerPixel_XAxis*")==1)
 				loc=strsearch(tempstring,"value",0)+7
 				locstr=tempstring[loc,loc+5]
 				v1=str2num(locstr)
 				McrnsPerPix=v1
 				print "Microns per pixel=",McrnsPerPix
 				break
-		endif
-	while(1)
+			Endif
+		while(1)
 	
+	ElseIf ((stringmatch(PVversion[0,0],"5")==1)&&(stringmatch(PVversion[2,2],"2")==1))
+			
 
 	
+		Do                                          
+			FReadLine fileref, tempstring
+			if (stringmatch(tempstring,"*micronsPerPixel*")==1)
+				FReadLine fileref, tempstring
+				if (stringmatch(tempstring,"*XAxis*")==1)
+				loc=strsearch(tempstring,"value",0)+7
+				locstr=tempstring[loc,loc+5]
+				v1=str2num(locstr)
+				McrnsPerPix=v1
+				print "Microns per pixel=",McrnsPerPix
+				Endif
+				break
+			Endif
+		
+		while(1)
+		
+		Do
+			FReadLine fileref, tempstring
+			if (stringmatch(tempstring,"*opticalZoom*")==1)
+					loc=strsearch(tempstring,"value",0)+7
+					locstr=tempstring[loc,loc+5]
+					v1=str2num(locstr)
+					zoom=v1
+					break
+			endif
+		while(1)
+		
+		Do
+			FReadLine fileref, tempstring
+				if (stringmatch(tempstring,"*scanLinePeriod*")==1)
+					Do
+						FReadLine fileref, tempstring
+						if (stringmatch(tempstring,"*scanLinePeriod*")==1)
+						loc=strsearch(tempstring,"value",0)+7
+						locstr=tempstring[loc,loc+8]
+						v1=str2num(locstr)
+						ScanLinePrd=v1*1000
+						print "Scanline period is (ms)=",ScanLinePrd
+						break
+						endif
+					while(1)
+					break
+				Endif
+		while(1) 
 
-	
+
+	Endif
 
 	If ((stringmatch(PVversion[0,7],"4.3.2.13")==1)||(stringmatch(PVversion[0,0],"5")==1)) // in this version of prairie view at least microns per pixel is changed in config file depending on the optical zoom used.
 	
@@ -190,6 +242,7 @@
 	index=0
 	i=0
 	String tempfilecycle
+	
 	Do
 
 		fileName = IndexedFile(diskfolderpath, index, ".tif")
