@@ -3,14 +3,18 @@
 //LINESCANPANEL loads linescan images acquired with PrairieView and creates linescan profiles.
 //
 //-------------
-//It is recommended to load each linescan folder in a separate data folder, then to merge folders as needed once profiles have been calculated
+//It is recommended to load each linescan folder in a separate data folder, then to merge folders as needed once 
+//profiles have been calculated
 //The Load images box in the LineScan Analysis panel calls the function Loadlinescanimages() 
-//Select the prairieview xml config file and load tiffs images of corresponding channel. Rename and splits in groups depending similar to neuromatic groups 
-// Loaded tiff are renamed as: list_group_filesuffix_Channel_index. Then creates a stack of each tiff and group, named Stack_channel_filesuffix_group
+//Select the prairieview xml config file and load tiffs images of corresponding channel. Rename and splits in groups
+//depending similar to neuromatic groups 
+// Loaded tiff are renamed as: list_group_filesuffix_Channel_index. Then creates a stack of each tiff and group, 
+//named Stack_channel_filesuffix_group
 //The Analyze images box in the  LineScan Analysis panel calls the function CalcLSprofiles()
-// this allows to select the position of the vertical profile to create (using Igor Imagelineprofile function)
-//output waves are named profile_channel_filesuffix_indexofprofile_group_indexofwave
-// to display position of calculated profile on image select image and appendtograph lineprofy vs lineprofx in subfolder infoprof...
+//This allows to select the position of the vertical profile to create (using Igor Imagelineprofile function)
+//Output waves are named profile_channel_filesuffix_indexofprofile_group_indexofwave
+//To display position of calculated profile on image select image and appendtograph lineprofy vs lineprofx in
+//subfolder infoprof...
 //-------------
 //By Alex Tran-Van-Minh (alexandra.tran.van.minh@gmail.com)
 //-------------
@@ -18,16 +22,21 @@
 //02-JAN-2013: Current PV version (4.3.2.13) does already includes zoom in pixel size. Other versions (e.g. 4.2.1.17) required
 //dividing by optical zoom to get real pixel size
 //Background subtraction checkbox for subtraction from user-entered value or profile. 
-//Output wave (background subtracted) is named c_profile_channel_filesuffix_indexofprofile_group_indexofwave and is the one plotted
+//Output wave (background subtracted) is named c_profile_channel_filesuffix_indexofprofile_group_indexofwave 
+//and is the one plotted
 
 //13-MAR-2013: 
 //1. Corrected image loading to load and display images properly even when there are no repetitions
 //2. All loaded waves are now scaled (including unclassified waves "ls_...")
-//3. All profile waves called "profile_Chx_profilenumber_groupnumber_..." or "c_profile_Chx_profilenumber_groupnumber_..."   are now INDIVIDUAL waves, 
-// the stack of these waves are now contained in "st_Chx_profilenumber_groupnumber" or "c_st_Chx_profilenumber_groupnumber"
+//3. All profile waves called "profile_Chx_profilenumber_groupnumber_..." or "
+//c_profile_Chx_profilenumber_groupnumber_..."   are now INDIVIDUAL waves, 
+// the stack of these waves are now contained in "st_Chx_profilenumber_groupnumber" or 
+//"c_st_Chx_profilenumber_groupnumber"
 //4. Fixed "rename error" bug that was appearing when creating multiple profiles with background subtraction:
-//now unique names are created for background waves each time the "calculate" button is used. Background waves are named bg_channel_indexofprofile_group_indexofwave,
-//the average value of each of these background waves is used to subtract from the corresponding profile from the same image.
+//now unique names are created for background waves each time the "calculate" button is used.
+//Background waves are named bg_channel_indexofprofile_group_indexofwave,
+//the average value of each of these background waves is used to subtract from the corresponding profile
+//from the same image.
 
 //27-APR-2013:
 //Add option for 4 channels selection and addition of profiles from 2 channels.
@@ -58,16 +67,31 @@
 //From version 5.1 on PrairieView includes ".ome" suffix in their file names. Modified loading procedure accordingly.
 
 //13-AUG-2014:
-//Adjusted reading of PrairieView .xml  file in Loadlinescanimages() as order and name of some parameters changed in 5.2 version
+//Adjusted reading of PrairieView .xml file in Loadlinescanimages() as order and name of some parameters
+// changed in .xml file in 5.2 version
+
+//02-APR-2014:
+//Loadlinescanimages() modified to load .xml file from PrairieView5.3
+
+//03-MAY-2015:
+//Added variables in Loadlinescanimages() in order to generalize loading of .xml file for all versions after PV5.2
+//Commented Loadlinescanimages()
+//Modified oponprofiles() function: simplified code
+//also changed so that operations can be performed on any profile not just most recent ones
+//Fixed bug in CalcLSprofiles() function: all combination of tickmarks for background subtraction now produce wanted
+//combination of methods or appropriate error message
+//Fixed bug in CalcLSprofiles() function: not all "profile_chx_..." waves were created when background
+//subtraction was checked
+
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
  Macro linescanpanel()
- 	execute "makelinescanpanel()"
+ 	execute "makelinescanpanel()" //calls function to build Linescan panel window
  end
  
  ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
- Function Loadlinescanimages()
+ Function Loadlinescanimages()//Loads linescan images from selected channels from PrairieView folder chosen by user
  
 	variable/g FlagCh1, FlagCh2, FlagCh3, FlagCh4, displayflag,groupnum
 	DFREF cDF=GetDataFolderdfr()
@@ -105,6 +129,7 @@
 
 //reads config file and extract imaging parameters to use for wave scaling
 	 string /g tempstring,locstr,PVversion
+	 variable/g PVversionmain, PVversionsub
  	 variable /g V1,loc,McrnsPerPix,zoom,ScanLinePrd
  	 variable/g PixelSize
  
@@ -120,8 +145,50 @@
 
 	while(1)
 	
+	PVversionmain=str2num(PVversion[0,0])
+	PVversionsub=str2num(PVversion[2,2])
 	
-	if ((stringmatch(PVversion[0,0],"4")==1)||((stringmatch(PVversion[0,0],"5")==1)&&(stringmatch(PVversion[2,2],"0")==1))||((stringmatch(PVversion[0,0],"5")==1)&&(stringmatch(PVversion[2,2],"1")==1)))
+	
+	if (PVversionmain==4)
+		
+		Do
+			FReadLine fileref, tempstring
+				if (stringmatch(tempstring,"*scanlinePeriod*")==1)
+					loc=strsearch(tempstring,"value",0)+7
+					locstr=tempstring[loc,loc+8]
+					v1=str2num(locstr)
+					ScanLinePrd=v1*1000
+					print "Scanline period is (ms)=",ScanLinePrd
+					break
+				endif
+		while(1) 
+		
+		Do
+			FReadLine fileref, tempstring
+			if (stringmatch(tempstring,"*opticalZoom*")==1)
+					loc=strsearch(tempstring,"value",0)+7
+					locstr=tempstring[loc,loc+5]
+					v1=str2num(locstr)
+					zoom=v1
+					print "Optical zoom=",zoom
+					break
+			endif
+		while(1)
+	
+		 Do                                          
+			FReadLine fileref, tempstring
+			if (stringmatch(tempstring,"*micronsPerPixel_XAxis*")==1)
+				loc=strsearch(tempstring,"value",0)+7
+				locstr=tempstring[loc,loc+5]
+				v1=str2num(locstr)
+				McrnsPerPix=v1
+				print "Microns per pixel=",McrnsPerPix
+				break
+			Endif
+		while(1)
+	Endif
+	
+	if ((PVversionmain==5)&&(PVversionsub<=1)) // read config file and extract image parameters for PV4.x, 5.0 or 5.1
 	
 		Do
 			FReadLine fileref, tempstring
@@ -158,8 +225,10 @@
 				break
 			Endif
 		while(1)
+		
+	//For PrairieView v 5.2 and above
 	
-	ElseIf ((stringmatch(PVversion[0,0],"5")==1)&&(stringmatch(PVversion[2,2],"2")==1))
+	ElseIf ((PVversionmain==5)&&(PVversionsub>=2))
 			
 
 	
@@ -211,12 +280,12 @@
 
 	Endif
 
-	If ((stringmatch(PVversion[0,7],"4.3.2.13")==1)||(stringmatch(PVversion[0,0],"5")==1)) // in this version of prairie view at least microns per pixel is changed in config file depending on the optical zoom used.
-	
+	If ((stringmatch(PVversion[0,7],"4.3.2.13")==1)||(stringmatch(PVversion[0,0],"5")==1)) 
+	// in these versions of Prairieview at least, microns per pixel is changed in config file depending on the optical zoom used.
 		pixelsize=McrnsPerPix
 		print "Pixel size is (um)", pixelsize
 		
-	Else
+	Else //in other PV4.x versions mcirons per pixel parameters is constant and need to be divided by zoom value
 		pixelsize=McrnsPerPix/zoom
 		print "Pixel size is (um)", pixelsize
 	
@@ -251,8 +320,8 @@
 			break		
 		endif
 		
-	
-		If ((stringmatch(PVversion[0],"5")==1)&&(str2num(PVversion[2])>=1))//From version 5.1 on file names include .ome before .tif
+	//From version 5.1 on file names include .ome before .tif
+		If ((PVversionmain==5)&&(PVversionsub>=1))
 			tempfilecycle=filename[(strlen(filename)-10),strlen(filename)-9]
 		Else 
 			tempfilecycle=filename[(strlen(filename)-6),strlen(filename)-5]
@@ -300,7 +369,7 @@
 			if (channelstoload[chindex]==1)
 			
 				string tempstringlist=wavelist("ls_"+filesuffix+"_Ch"+num2str(chindex+1)+"_"+"*",";","")
-				for (k=0;k<groupnum;k+=1) //copies waves, and redistribute and renames according to number of groups
+				for (k=0;k<groupnum;k+=1) //copies and renames waves according to number of groups
 					for (jj=k*varcyclenum;jj<itemsinlist(tempstringlist); jj+=(groupnum*varcyclenum)) //checks for images to concatenate
 						j=floor((jj-k)/(groupnum*varcyclenum))
 					
@@ -317,9 +386,9 @@
 					string templistk1=wavelist("list_"+num2str(k)+"_"+filesuffix+"_Ch"+num2str(chindex+1)+"_"+"*",";","")
 
 				
-					//creates a stack of images for each group and each channel and the average image of each stack to use for display
+					//creates a stack of images for each group and each channel 
+					//the average image of each stack is used for display
 					if ((itemsinlist(templistk1))>2) 
-						
 						imagetransform stackimages $("list_"+num2str(k)+"_"+filesuffix+"_Ch"+num2str(chindex+1)+"_0")
 						Duplicate M_Stack, $("Stack_Ch"+num2str(chindex+1)+"_"+filesuffix+"_"+num2str(k))
 						Setscale/p x,0,pixelsize,"",$("Stack_Ch"+num2str(chindex+1)+"_"+filesuffix+"_"+num2str(k))
@@ -333,8 +402,8 @@
 							ModifyGraph nticks(bottom)=30
 							Setaxis/a/r left
 						endif
-					elseif ((itemsinlist(templistk1))==2) // Imagetransform averageimage command works only for 3d wave with >=3 layers
-						
+					elseif ((itemsinlist(templistk1))==2) 
+					// Imagetransform averageimage command works only for 3d wave with >=3 layers
 						WAVE/Z temp0,  temp1,  tempstack
 						Duplicate/o/r=[0,dimsize($("list_"+num2str(k)+"_"+filesuffix+"_Ch"+num2str(chindex+1)+"_0"),0)][0,dimsize($("list_"+num2str(k)+"_"+filesuffix+"_Ch"+num2str(chindex+1)+"_0"),1)] $("list_"+num2str(k)+"_"+filesuffix+"_Ch"+num2str(chindex+1)+"_0"), temp0
 						Duplicate/o/r=[0,dimsize($("list_"+num2str(k)+"_"+filesuffix+"_Ch"+num2str(chindex+1)+"_0"),0)][0,dimsize($("list_"+num2str(k)+"_"+filesuffix+"_Ch"+num2str(chindex+1)+"_0"),1)] $("list_"+num2str(k)+"_"+filesuffix+"_Ch"+num2str(chindex+1)+"_1"), temp1
@@ -376,7 +445,7 @@
 
 
 	
-	// kills temporary waves if imagetransfor Igor function has been used
+	// kills temporary waves if imagetransform Igor function has been used
 	If (waveexists(M_Stack)==1)
 		Killwaves M_Stack
 	Endif
@@ -394,7 +463,8 @@ End
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-Function CalcLSprofiles()
+Function CalcLSprofiles()//from loaded images, calculates profiles (in time axis) from positions (along x axis) chosen by user
+	//performs background subtraction as chosen by user
  
 	DFREF cDF=getdatafolderdfr()
 	NVAR scanlineprd,FlagCh1,FlagCh2,FlagCh3,FlagCh4, groupnum, pixelsize, varcyclenum
@@ -483,7 +553,7 @@ Function CalcLSprofiles()
 	Endif
 	
 	
-	If (Flagbgprofile==1)//Use this if a part of the line has been drawn out of the dendrite
+	If ((Flagbgsub==1)&&(Flagbgprofile==1))//Use this if a part of the line has been drawn out of the dendrite
 		string namexbgstart
 		namexbgstart=uniquename("xbgstart",3,0)
 		variable/g $namexbgstart
@@ -501,11 +571,7 @@ Function CalcLSprofiles()
 		If (((varbgstart+varbgwidth)>dimsize($firstfile,0)/pixelsize) || (varbgstart<0))
 			doAlert 0, "background profile out of image"
 			return 0
-		Endif
-		
-
-
-		
+		Endif	
 	endif
 	
 	
@@ -530,7 +596,7 @@ Function CalcLSprofiles()
 			string tempname0
 			tempname0=uniquename("profile_Ch"+num2str(chindex+1)+"_",4,0)
 			string/g $tempname0
-			If (Flagbgprofile==1)
+			If ((Flagbgsub==1)&&(Flagbgprofile==1)) //calculates profiles for background
 				Make/o/n=2 xbgprof
 				xbgprof[0]=varbgstart+(varbgwidth/2) //xbgprof will be used as xwave in the imagelineprofile command (center of the profile)
 				xbgprof[1]=varbgstart+(varbgwidth/2)
@@ -556,18 +622,18 @@ Function CalcLSprofiles()
 					
 					If (dimsize($("Stack_Ch"+num2str(chindex+1)+"_"+filesuffix+"_"+num2str(j)),2)==0)
 						Duplicate/o $("bg_profile_Ch"+num2str(chindex+1)+"_"+num2str(j)), tempwave
-						Rename tempwave, $(tempnamebg+"_"+num2str(j)+"_0")
+						Duplicate/o tempwave, $(tempnamebg+"_"+num2str(j)+"_0")
 						//print  (tempnamebg+"_"+num2str(j)+"_0")
 						Setscale/P x,0, dimdelta($("Stack_Ch"+num2str(chindex+1)+"_"+filesuffix+"_"+num2str(j)),1),"" $(tempnamebg+"_"+num2str(j)+"_0")
-			
+						Killwaves tempwave
 					Else
 						for (k=0; k<dimsize($("Stack_Ch"+num2str(chindex+1)+"_"+filesuffix+"_"+num2str(j)),2);k+=1)
 							Make/o/n=(dimsize($("Stack_Ch"+num2str(chindex+1)+"_"+filesuffix+"_"+num2str(j)),1)) tempwave 
 							Duplicate/o $("bg_profile_Ch"+num2str(chindex+1)+"_"+num2str(j)), tempwave2
 							tempwave[][]=tempwave2[p][k]
-							Rename tempwave, $(tempnamebg+"_"+num2str(j)+"_"+num2str(k))
+							Duplicate/o tempwave, $(tempnamebg+"_"+num2str(j)+"_"+num2str(k))
 							Setscale/P x,0, dimdelta($("Stack_Ch"+num2str(chindex+1)+"_"+filesuffix+"_"+num2str(j)),1),"" $(tempnamebg+"_"+num2str(j)+"_"+num2str(k))
-							
+							Killwaves tempwave
 						endfor	
 					Endif
 					
@@ -581,22 +647,21 @@ Function CalcLSprofiles()
 			else //if the profiles are from a stack of only 1 image
 				Duplicate/o W_Imagelineprofile,  $("st_"+tempname0+"_"+num2str(i))
 			endif
-
 			Setscale/p x,0,scanlineprd,"ms",   $("st_"+tempname0+"_"+num2str(i))
 			
-				If ((Flagbgsub==1)&&(Flagbgvalue==1))//creates background corrected profile waves "c_profile_ch1_..." from entered background values 
-					
+				If ((Flagbgsub==1)&&(Flagbgvalue==1))
+				//creates background corrected profile waves "c_profile_chx_..." from entered background values 
 					make/o/n=(dimsize( $("st_"+tempname0+"_"+num2str(i)),0), dimsize( $("st_"+tempname0+"_"+num2str(i)),1)) tempsub
 					Duplicate/o  $("st_"+tempname0+"_"+num2str(i)),  tempsub
 					tempsub=tempsub-bgvalue
-					Rename tempsub, $("c_"+"st_"+tempname0+"_"+num2str(i))
-				Elseif ((Flagbgsub==1)&&(Flagbgprofile==1))//creates background corrected profile waves "c_profile_ch1_..." from profiles background values 
-				
+					Duplicate/o tempsub, $("c_"+"st_"+tempname0+"_"+num2str(i))
+					Killwaves tempsub
 					
+				Elseif ((Flagbgsub==1)&&(Flagbgprofile==1))
+				//creates background corrected profile waves "c_profile_chx_..." from profiles background values 
 					make/o/n=(dimsize( $("st_"+tempname0+"_"+num2str(i)),0), dimsize( $("st_"+tempname0+"_"+num2str(i)),1)) tempsub
 					Duplicate/o  $("st_"+tempname0+"_"+num2str(i)),  tempsub
 						If (dimsize($("Stack_Ch"+num2str(chindex+1)+"_"+filesuffix+"_"+num2str(i)),2)==0)
-							
 							wavestats/Z $(tempnamebg+"_"+num2str(i)+"_0")
 							variable tempvalbg2=V_avg
 							tempsub[][j]=tempsub[p][j]-tempvalbg2
@@ -608,8 +673,8 @@ Function CalcLSprofiles()
 							endfor
 						Endif
 					
-				
-					Rename tempsub, $("c_"+"st_"+tempname0+"_"+num2str(i))
+					Duplicate/o tempsub, $("c_"+"st_"+tempname0+"_"+num2str(i))
+					Killwaves tempsub
 				Endif
 				
 				variable endthisloop
@@ -624,18 +689,18 @@ Function CalcLSprofiles()
 					
 					Duplicate/o $("st_"+tempname0+"_"+num2str(i)), tempwave2
 					tempwave[][]=tempwave2[p][k]
-					Rename tempwave, $(tempname0+"_"+num2str(i)+"_"+num2str(k))// creates individual waves corresponding to each layer of the stack "profile_..." 
+					Duplicate/o tempwave, $(tempname0+"_"+num2str(i)+"_"+num2str(k))// creates individual waves corresponding to each layer of the stack "profile_..." 
 					//for further analysis with other procedures
 					Setscale/p x,0,scanlineprd,"ms", $(tempname0+"_"+num2str(i)+"_"+num2str(k))
-					Killwaves tempwave2
+					Killwaves tempwave, tempwave2
 					
 					if (waveexists($("c_"+"st_"+tempname0+"_"+num2str(i)))==1)
 						Make/o/n=(dimsize($("Stack_Ch"+num2str(chindex+1)+"_"+filesuffix+"_"+num2str(i)),1)) tempcwave 
 						Duplicate/o $("c_"+"st_"+tempname0+"_"+num2str(i)), tempcwave2
 						tempcwave[][]=tempcwave2[p][k]
-						Rename tempcwave, $("c_"+tempname0+"_"+num2str(i)+"_"+num2str(k))
+						Duplicate/o tempcwave, $("c_"+tempname0+"_"+num2str(i)+"_"+num2str(k))
 						Setscale/p x,0,scanlineprd,"ms", $("c_"+tempname0+"_"+num2str(i)+"_"+num2str(k))
-						Killwaves tempcwave2
+						Killwaves tempcwave, tempcwave2
 					endif
 					
 
@@ -708,7 +773,7 @@ End
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
-Function average2dwave(wavein,plot,plotind,newname)
+Function average2dwave(wavein,plot,plotind,newname)//calculate average from 2d wave
 	WAVE wavein
 	variable plot
 	Variable plotind
@@ -789,7 +854,8 @@ End
 
 Function oponprofiles()
 	// this function finds the profiles created with CalcLSprofiles() functions, finds in the panel the channels
-	// the user wants to add and if they exists create new waves: c_profile_channeltoadd1_channeltoadd2_profilenum_groupnum_waveindex
+	// the user wants to add and if they exists create new waves:
+	// c_profile_channeltoadd1channeltoadd2_operation_profilenum_groupnum_waveindex
 	
 	DFREF cDF=getdatafolderdfr()
 	NVAR Flag2Ch1, Flag2Ch2,Flag2Ch3, Flag2Ch4
@@ -797,6 +863,7 @@ Function oponprofiles()
 	variable/g valprofadd,checkbg
 	SVAR filesuffix
 	
+	//gets channels to add from panel
 	Controlinfo/W=linescanpanel plotproftoadd1
 		 chtoadd1=S_Value
 	Controlinfo/W=linescanpanel plotproftoadd2
@@ -824,10 +891,23 @@ Function oponprofiles()
 		return 0
 	Endif
 	
-	string prefixadd1, prefixadd2, prefixadd12
+	string prefixadd1, prefixadd2, prefixadd12,prefixrawadd1,prefixrawadd2,prefixrawadd12
+	prefixrawadd1="profile_"+chtoadd1+"_"+num2str(valprofadd)
+	prefixrawadd2="profile_"+chtoadd2+"_"+num2str(valprofadd)
+	if (stringmatch(optype," + ")==1)
+		prefixrawadd12="profile_"+chtoadd1+chtoadd2+"_add"
+	elseif (stringmatch(optype," - ")==1)
+		prefixrawadd12="profile_"+chtoadd1+chtoadd2+"_min"
+	elseif (stringmatch(optype," / ")==1)
+		prefixrawadd12="profile_"+chtoadd1+chtoadd2+"_over"
+	elseif (stringmatch(optype," x ")==1)
+		prefixrawadd12="profile_"+chtoadd1+chtoadd2+"_mult"	
+	endif
+
+
 	If (checkbg==1)
-		prefixadd1="c_profile_"+chtoadd1+"_"
-		prefixadd2="c_profile_"+chtoadd2+"_"
+		prefixadd1="c_profile_"+chtoadd1+"_"+num2str(valprofadd)
+		prefixadd2="c_profile_"+chtoadd2+"_"+num2str(valprofadd)
 		if (stringmatch(optype," + ")==1)
 			prefixadd12="c_profile_"+chtoadd1+chtoadd2+"_add"
 		elseif (stringmatch(optype," - ")==1)
@@ -837,153 +917,73 @@ Function oponprofiles()
 		elseif (stringmatch(optype," x ")==1)
 			prefixadd12="c_profile_"+chtoadd1+chtoadd2+"_mult"	
 		endif
-	Elseif (checkbg==0)
-		prefixadd1="profile_"+chtoadd1+"_"
-		prefixadd2="profile_"+chtoadd2+"_"
-		if (stringmatch(optype," + ")==1)
-			prefixadd12="profile_"+chtoadd1+chtoadd2+"_add"
-		elseif (stringmatch(optype," - ")==1)
-			prefixadd12="profile_"+chtoadd1+chtoadd2+"_min"
-		elseif (stringmatch(optype," / ")==1)
-			prefixadd12="profile_"+chtoadd1+chtoadd2+"_over"
-		elseif (stringmatch(optype," x ")==1)
-			prefixadd12="profile_"+chtoadd1+chtoadd2+"_mult"	
-		endif
-		print prefixadd12
 	Endif	
 	
+	
+	
 
 	
-	string wtoadd1=wavelist(prefixadd1+"*",";","")//+wavelist(prefixrawadd1+"*",";","")//lists existing profiles (background corrected and raw) from the first channel to add
-	string wtoadd2=wavelist(prefixadd2+"*",";","")//+wavelist(prefixrawadd2+"*",";","")//lists existing profiles (background corrected and raw)  from the second channel to add
-	string wtoadd12=wavelist(prefixadd12+"*",";","")//+wavelist(prefixrawadd12+"*",";","")//lists existing profiles (background corrected and raw) already additionned between two selected channels
-
-	variable testw
+	string toadd1=wavelist(prefixrawadd1+"*",";","")
+	string toadd2=wavelist(prefixrawadd2+"*",";","")
 	
-	make/o/n=(itemsinlist(wtoadd1)) wavetestindex1
-	make/o/n=(itemsinlist(wtoadd2)) wavetestindex2
-	make/o/n=(itemsinlist(wtoadd12)) wavetestindex12
+	variable lentoadd1=itemsinlist(toadd1)
 	
-	variable indexneww1=0
-	for (testw=0;testw<itemsinlist(wtoadd1);testw+=1) // loops through existing waves to find the profile index
-		string tempst=stringfromlist(testw,wtoadd1)
-		sscanf tempst, prefixadd1+"%f", indexneww1
-		wavetestindex1[testw]=indexneww1
+	variable groupind, traceind
+	variable i
+	
+	for (i=0;i<lentoadd1;i+=1)		
+		Make/O/n=(dimsize($(stringfromlist(i,toadd1)),0)) tempwave
+		Duplicate/o $(stringfromlist(i,toadd1)) tempwave1
+		Duplicate/o $(stringfromlist(i,toadd2)) tempwave2
+		If (stringmatch(optype," + ")==1)
+			tempwave=tempwave1+tempwave2
+		Elseif (stringmatch(optype," - ")==1)
+			tempwave=tempwave1-tempwave2
+		Elseif (stringmatch(optype," / ")==1)
+			tempwave=tempwave1/tempwave2
+		Elseif (stringmatch(optype," x ")==1)
+			tempwave=tempwave1*tempwave2
+		Endif
+		Setscale/P x,0,dimdelta($(stringfromlist(i,toadd1)),0),"" tempwave
+		sscanf stringfromlist(i,toadd1), prefixrawadd1+"_"+"%f%*[_]%f", groupind, traceind
+		Duplicate/o tempwave $(prefixrawadd12+num2str(valprofadd)+"_"+num2str(groupind)+"_"+num2str(traceind))
+		display  $(prefixrawadd12+num2str(valprofadd)+"_"+num2str(groupind)+"_"+num2str(traceind))
+		Killwaves tempwave, tempwave1,tempwave2
 	endfor
+	
+//	Killwaves toaddnow1,toaddnow2
+	
+	If (checkbg==1)
+	
+	string toaddbg1=wavelist(prefixadd1+"*",";","")
+	string toaddbg2=wavelist(prefixadd2+"*",";","")
+	
+	variable lentoaddbg1=itemsinlist(toaddbg1)
 
+		for (i=0;i<lentoaddbg1;i+=1)		
+			Make/O/n=(dimsize($(stringfromlist(i,toaddbg1)),0)) tempwave
+			Duplicate/o $(stringfromlist(i,toaddbg1)) tempwave1
+			Duplicate/o $(stringfromlist(i,toaddbg2)) tempwave2
+			If (stringmatch(optype," + ")==1)
+				tempwave=tempwave1+tempwave2
+			Elseif (stringmatch(optype," - ")==1)
+				tempwave=tempwave1-tempwave2
+			Elseif (stringmatch(optype," / ")==1)
+				tempwave=tempwave1/tempwave2
+			Elseif (stringmatch(optype," x ")==1)
+				tempwave=tempwave1*tempwave2
+			Endif
+			Setscale/P x,0,dimdelta($(stringfromlist(i,toadd1)),0),"" tempwave
+			sscanf stringfromlist(i,toaddbg1), prefixadd1+"_"+"%f%*[_]%f", groupind, traceind
+			Duplicate/o tempwave $(prefixadd12+num2str(valprofadd)+"_"+num2str(groupind)+"_"+num2str(traceind))
+			display  $(prefixadd12+num2str(valprofadd)+"_"+num2str(groupind)+"_"+num2str(traceind))
+			Killwaves tempwave, tempwave1,tempwave2
+		endfor
+	Endif
 	
-	variable indexprofile1// finds indices of profiles that have been calculated for first chanel to add, this number is stored in variable indexprofile1
-	variable numprofile1=1// finds number of profiles that have been calculated for first chanel to add, this number is stored in variable indexprofile1
-	make/o/n=(itemsinlist(wtoadd1))  windex1
-	for (testw=1;testw<dimsize(wavetestindex1,0);testw+=1)
-		if (wavetestindex1[testw]!=wavetestindex1[testw-1])
-			numprofile1+=1
-			indexprofile1=wavetestindex1[testw]
-			windex1[numprofile1-1]=wavetestindex1[testw]
-		endif
-	endfor
-	deletepoints  numprofile1,(itemsinlist(wtoadd1))-numprofile1, windex1
 
 
-	
-	variable indexneww2=0
-	for (testw=0;testw<itemsinlist(wtoadd2);testw+=1) // loops through existing waves to find the profile index
-		string tempst2=stringfromlist(testw,wtoadd2)
-		sscanf tempst2, prefixadd2+"%f", indexneww2
-		wavetestindex2[testw]=indexneww2
-	endfor
 
-	
-	variable indexprofile2// finds indices of profiles that have been calculated for second chanel to add, this number is stored in variable indexprofile2
-	variable numprofile2=1// finds number of profiles that have been calculated for second chanel to add, this number is stored in variable indexprofile2
-	make/o/n=(itemsinlist(wtoadd2))  windex2
-	for (testw=1;testw<dimsize(wavetestindex2,0);testw+=1)
-		if (wavetestindex2[testw]!=wavetestindex2[testw-1])
-			numprofile2+=1
-			indexprofile2=wavetestindex2[testw]
-			windex2[numprofile2-1]=wavetestindex2[testw]
-		endif
-	endfor
-	deletepoints  numprofile2,(itemsinlist(wtoadd2))-numprofile2, windex2
-
-	
-	variable indexneww12=0
-	for (testw=0;testw<itemsinlist(wtoadd12);testw+=1) // loops through existing waves to find the profile index of already added channels
-		string tempst12=stringfromlist(testw,wtoadd12)
-		sscanf tempst12, prefixadd12+"%f", indexneww12
-		wavetestindex12[testw]=indexneww12
-	endfor
-
-	
-	variable indexprofile12// finds indices of profiles that have been calculated and already added, this number is stored in variable indexprofile12
-	variable numprofile12=1// finds number of profiles that have been calculated and already added this number is stored in variable indexprofile12
-	make/o/n=(itemsinlist(wtoadd12))  windex12
-	for (testw=1;testw<dimsize(wavetestindex12,0);testw+=1)
-		if (wavetestindex12[testw]!=wavetestindex12[testw-1])
-			numprofile12+=1
-			indexprofile12=wavetestindex12[testw]
-			windex12[numprofile12-1]=wavetestindex12[testw]
-		endif
-	endfor
-	deletepoints  numprofile12,(itemsinlist(wtoadd12))-numprofile12, windex12
-
-	
-	//if the profiles have not been added yet, create a new wave to make the sum of corresponding profiles in each channel
-	
-	string prefixaddnow1=prefixadd1+num2str(valprofadd)+"_"
-	string prefixaddnow2=prefixadd2+num2str(valprofadd)+"_"
-	
-	string/g toaddnow1=wavelist(prefixaddnow1+"*",";","")
-	string/g toaddnow2=wavelist(prefixaddnow2+"*",";","")
-	
-	variable indadd
-	
-	findvalue/v=(valprofadd) windex12
-	variable prof12=V_value
-	///performs operation on profiles depending on the op type chosen
-	if (prof12==-1)
-		findvalue/v=(valprofadd) windex1
-		variable prof1=V_value
-		findvalue/v=(valprofadd) windex2
-		variable prof2=V_value		
-			if ((prof1!=-1)&&(prof2!=-1))
-				make/o/n=((dimsize($(stringfromlist(indadd,toaddnow1)),0)),itemsinlist(toaddnow1)) tempstack
-				for (indadd=0;indadd<itemsinlist(toaddnow1);indadd+=1)
-						make/o/n=((dimsize($(stringfromlist(indadd,toaddnow1)),0))) tempwave
-						Duplicate $(stringfromlist(indadd,toaddnow1)) temp0
-						Duplicate $(stringfromlist(indadd,toaddnow2)) temp1
-						If (stringmatch(optype," + ")==1)
-							tempwave=temp0+temp1
-						Elseif (stringmatch(optype," - ")==1)
-							tempwave=temp0-temp1
-						Elseif (stringmatch(optype," / ")==1)
-							tempwave=temp0/temp1
-						Elseif (stringmatch(optype," x ")==1)
-							tempwave=temp0*temp1
-						Endif
-						setscale/p x,0,dimdelta(temp0,0),"" tempwave
-						variable groupindex,traceindex
-						sscanf stringfromlist(indadd,toaddnow1), prefixaddnow1+"%f%*[_]%f", groupindex, traceindex
-						tempstack[][indadd]=tempwave[p]
-						rename tempwave $(prefixadd12+num2str(valprofadd)+"_"+num2str(groupindex)+"_"+num2str(traceindex))
-						killwaves temp0, temp1
-				endfor
-				setscale/p x,0,dimdelta($(prefixadd12+num2str(valprofadd)+"_"+num2str(groupindex)+"_"+num2str(traceindex)),0),"" tempstack
-				rename tempstack $("st_"+prefixadd12+num2str(valprofadd)+"_"+num2str(groupindex))
-				string nwavetoavg="st_"+prefixadd12+num2str(valprofadd)+"_"+num2str(groupindex)
-				average2dwave($nwavetoavg,0,1,1)
-			else
-				doAlert 0, "These profiles do not exist"
-			endif
-	else
-		doAlert 0, "This operation has already been performed on these profiles!"
-		return 0
-	endif
-	
-		
-	
-	killwaves wavetestindex1, wavetestindex2, wavetestindex12, windex1, windex2, windex12
-	
 End
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1046,6 +1046,10 @@ End
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 Function imdff(imageraw,ystart,yend,filter)
+	//creates a "deltaF/F" image from image from folder
+	//assumes time is on the y axis of image
+	//F0 is an average taken betwen the input variable ystart and yend
+	//if filter>3, also creates an image with NxN gaussian filter 
 
 	wave imageraw
 	variable ystart,yend,filter
@@ -1091,7 +1095,7 @@ Function imdff(imageraw,ystart,yend,filter)
 	Setaxis/a/r left
 	ModifyImage $("dff"+nameofwave(imageraw)) ctab= {-0.5,2,Grays,0}
 	
-	If (filter>=3)
+	If (filter>=3)// creates filterxfilter gaussian filtered image
 		Duplicate $("dff"+nameofwave(imageraw)) tempwave
 		matrixfilter/n=(filter) gauss tempwave
 		rename tempwave,$("f_dff"+nameofwave(imageraw)) 
@@ -1478,7 +1482,7 @@ Function MakeLinescanPanel()
 	
 	
 	
-	NewPanel /K=1 /W=(835,50,1360,600) as "LineScan Analysis"
+	NewPanel /K=1 /W=(428,50,953,600) as "LineScan Analysis"
 	DoWindow/C linescanpanel
 	
 	Groupbox loadbox, pos={20,4}, size={490,140}, Title="Load images",fstyle=1,fsize=14
